@@ -47,69 +47,65 @@ class Agent():
 
         self.y = y
         self.x = x
-        self.expmap = np.ones((y, x)).astype('float32')
+        self.expmap = np.zeros((y, x)).astype('float32')
 
         self.memorylen = memorylen
         self.etmem = Buffer(memorylen)
         self.pathmem = Buffer(memorylen)
 
     def reset_exp(self):
-        #self.expmap = np.ones((self.y, self.x)).astype('float32')
-        self.expmap *= 1.10
-        self.expmap = np.clip(self.expmap, 0, 1)
+        pass
+        #self.expmap *= 0.0
+
+    def update_exp(self, x, y):
+        #Set to one if visited the first time, exponentially decay each subsequent time
+        if self.expmap[x][y] == 0.0:
+            self.expmap[x][y] = 1.0
+        else:
+            #self.expmap[x][y] = max(self.expmap[x][y] - 0.01, 0.0001)
+            self.expmap[x][y] += -0.5*self.expmap[x][y]
 
     def getexpscores(self):
         p = []
-        for i in range(self.pathmem.length()):
-            avg_score = 0
-            count = 0
+        for i in range(self.etmem.length()):
+            et = self.etmem.get(i)[0]
             path = self.pathmem.get(i)
+
+            total_score = 0
             for point in path:
-                avg_score += self.expmap[point[0]][point[1]]
-                count += 1
-            
-            avg_score = avg_score / count
-            p.append(avg_score)
+                total_score += et[point[0]][point[1]] * self.expmap[point[0]][point[1]]
+
+            p.append(total_score)
+            #p.append(np.mean(total_score))
+
         return p
 
     def replay(self, n, cost_map, wgt, type):
-
         #Current solution: Memory access is chosen based on distance between current position and average of path's position. Scaled based on amount of times it's been accessed. Doesn't perform better than completely uniform.
-
         if type == "exp":
-
+            #Probability based on how eligibility times how often it was visited
             p = self.getexpscores()
-            p_sm = softmax(p, 10)
+            p_sm = softmax(p, 0.5)
 
             for i in range(n):
-                idx = np.random.choice(list(range(self.pathmem.length())), p=p_sm)
+                idx = np.argmax(p)#np.random.choice(list(range(self.pathmem.length())), p=p_sm)
                 path = self.pathmem.get(idx)
                 et = self.etmem.get(idx)[0]
                 wgt = update_weights(cost_map, et, path, wgt)
 
                 #Decay replay accessed, reassess softmax
-                avg_score = 0
-                count = 0
                 for point in path:
-                    self.expmap[point[0]][point[1]] *= 0.75
+                    self.update_exp(point[0], point[1])
+                #self.expmap += (np.multiply(-1*(et/2), self.expmap))
+                #self.expmap = np.where(self.expmap < 0, 0.0001, self.expmap)
 
-                p = []
-                for i in range(self.pathmem.length()):
-                    avg_score = 0
-                    count = 0
-                    path = self.pathmem.get(i)
-                    for point in path:
-                        avg_score += self.expmap[point[0]][point[1]]
-                        count += 1
-                    
                 p = self.getexpscores()
-                p_sm = softmax(p, 10)
+                p_sm = softmax(p, 0.5)
 
-
-                p_sm = softmax(p, 10)
+            #self.reset_exp()
 
         elif type == "recent":
-            #Uniform distribution
+            #Probability based on recency of experience
             #p = [self.pathmem.length() - i for i in range(self.pathmem.length())]
 
             #p = [5 - np.exp(0.025*i) for i in range(self.pathmem.length())]
@@ -126,43 +122,6 @@ class Agent():
                 path = self.pathmem.get(idx)
                 et = self.etmem.get(idx)[0]
                 wgt = update_weights(cost_map, et, path, wgt)
-
-                #Decay replay accessed, reassess softmax
-                self.etmem.set(idx, (self.etmem.get(idx)[0], self.etmem.get(idx)[1] * 0.50))
-                p[idx] *= 0.5
-                p_sm = softmax(p, 25.0)       
-
-    #    if type == "dist":
-            #Choose memory probability based on distance between current location and average distance of path
-    #        p = []
-    #        for i in range(self.pathmem.length()):
-    #            avg_dist = 0
-    #            count = 0
-    #           path = self.pathmem.get(i)
-    #            for point in path:
-    #                avg_dist += np.sqrt((float(self.current_pos[0]) - point[0])**2 + (float(self.current_pos[1]) - point[1])**2)
-    #                count += 1
-
-    #            avg_dist = avg_dist / count
-    #            p.append(avg_dist)
-
-            #Scale probabiliies by amount of times accessed
-    #        for j in range(len(p)):
-    #            p[j] = p[j] * self.etmem.get(j)[1]
-
-    #        p_sm = softmax(p, 1.5)
-
-    #        for i in range(n):
-    #            idx = np.random.choice(list(range(self.pathmem.length())), p=p_sm)
-    #            path = self.pathmem.get(idx)
-    #            et = self.etmem.get(idx)[0]
-    #            wgt = update_weights(cost_map, et, path, wgt)
-
-                #Decay replay accessed, reassess softmax
-    #            self.etmem.set(idx, (self.etmem.get(idx)[0], self.etmem.get(idx)[1] * 0.50))
-    #            p[idx] *= 0.50
-    #            p_sm = softmax(p, 1.5)
-
         else:
             #Uniform distribution
             p = [1/self.pathmem.length() for i in range(self.pathmem.length())]
@@ -196,7 +155,6 @@ class Agent():
         new_costmap = copy.deepcopy(costmap)
 
         #In eligibility trace memory, keep track of number of times it is accessed for replay
-        self.etmem.push((et, 1))
         
         pathtemp = []
 
@@ -206,22 +164,28 @@ class Agent():
             if n == 0:
                 if not completed:
                     print("Could not get to current destination (This shouldn't happen)")
+                    print(reversedpath)
                     print(i)
                     exit(1)
+
+                self.update_exp(self.current_pos[0], self.current_pos[1])
                 continue
 
             if not completed:
                 #If list is not empty
-                if pathtemp:
-                    self.pathmem.push(pathtemp)
+                #if pathtemp:
+                    #self.etmem.push((et, 1))
+                    #self.pathmem.push(pathtemp)
                 new_costmap[i[0]][i[1]] = 15
                 return new_costmap, n
 
-            self.expmap[self.current_pos[0]][self.current_pos[1]] *= 0.75
+
+            self.update_exp(self.current_pos[0], self.current_pos[1])
             pathtemp.append(i)
             new_costmap[self.current_pos[0]][self.current_pos[1]] = self.sense()
 
         #If list is not empty
-        if pathtemp:
-            self.pathmem.push(pathtemp)
+        #if pathtemp:
+        #    self.etmem.push((et, 1))
+        #    self.pathmem.push(pathtemp)
         return new_costmap, len(path)

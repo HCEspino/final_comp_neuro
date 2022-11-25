@@ -79,6 +79,9 @@ def spikewave_trial(replay, replay_amt, mem_size, mem_type):
             cost_map, p_len = agent.drive(p, cost_map, et)
             p = p[len(p) - p_len:]
 
+            agent.pathmem.push(p)
+            agent.etmem.push((et, 1))
+
             wgt = update_weights(cost_map, et, p, wgt)
 
             wp_end = agent.current_pos
@@ -89,7 +92,6 @@ def spikewave_trial(replay, replay_amt, mem_size, mem_type):
                 wp_start = np.array([1, 1])
                 if replay and t > replay_amt:
                     wgt = agent.replay(replay_amt, cost_map, wgt, mem_type)
-                    agent.reset_exp()
 
                 print(f"{t+1}/{args.timesteps} completed {mem_type}")
                 #draw_weights(n1, n2, 1, 1, 0, 15, f"{t+1}_{mem_type}", wgt)
@@ -101,31 +103,32 @@ def spikewave_trial(replay, replay_amt, mem_size, mem_type):
 losses_nomem = []
 losses_mem = []
 losses_exp = []
-losses_mem_recent = []
+#losses_mem_recent = []
 
 for i in range(args.trials):
-    losses_nomem.append(spikewave_trial(False, 0, 0, "nomemory"))
-    losses_mem.append(spikewave_trial(True, 15, 50, "uniform"))
-    losses_exp.append(spikewave_trial(True, 15, 50, "exp"))
-    losses_mem_recent.append(spikewave_trial(True, 15, 50, "recent"))
+    #losses_nomem.append(spikewave_trial(False, 0, 0, "nomemory"))
+    losses_mem.append(spikewave_trial(True, 10, 100, "uniform"))
+    losses_exp.append(spikewave_trial(True, 10, 100, "exp"))
+#    losses_mem_recent.append(spikewave_trial(True, 5, 50, "recent"))
 
-losses_nomem = np.array(losses_nomem)
+#losses_nomem = np.array(losses_nomem)
 losses_mem = np.array(losses_mem)
 losses_exp = np.array(losses_exp)
-losses_mem_recent = np.array(losses_mem_recent)
+#losses_mem_recent = np.array(losses_mem_recent)
 
-std_nomem = np.std(losses_nomem, axis=0)
+#std_nomem = np.std(losses_nomem, axis=0)
 std_mem = np.std(losses_mem, axis=0)
 std_exp = np.std(losses_exp, axis=0)
-std_mem_recent = np.std(losses_nomem, axis=0)
-losses_nomem = np.mean(losses_nomem, axis=0)
+#std_mem_recent = np.std(losses_nomem, axis=0)
+
+#losses_nomem = np.mean(losses_nomem, axis=0)
 losses_mem = np.mean(losses_mem, axis=0)
 losses_exp = np.mean(losses_exp, axis=0)
-losses_mem_recent = np.mean(losses_mem_recent, axis=0)
+#losses_mem_recent = np.mean(losses_mem_recent, axis=0)
 
 plt.figure()
-plt.plot(list(range(args.timesteps)), losses_nomem, label="No Replay")
-plt.fill_between(list(range(args.timesteps)), losses_nomem + std_nomem, losses_nomem - std_nomem, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
+#plt.plot(list(range(args.timesteps)), losses_nomem, label="No Replay")
+#plt.fill_between(list(range(args.timesteps)), losses_nomem + std_nomem, losses_nomem - std_nomem, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
 
 plt.plot(list(range(args.timesteps)), losses_mem, label="Uniform Replay")
 plt.fill_between(list(range(args.timesteps)), losses_mem + std_mem, losses_mem - std_mem, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
@@ -133,8 +136,8 @@ plt.fill_between(list(range(args.timesteps)), losses_mem + std_mem, losses_mem -
 plt.plot(list(range(args.timesteps)), losses_exp, label="Experience Replay")
 plt.fill_between(list(range(args.timesteps)), losses_exp + std_exp, losses_exp - std_exp, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
 
-plt.plot(list(range(args.timesteps)), losses_mem_recent, label="Recency Replay")
-plt.fill_between(list(range(args.timesteps)), losses_mem_recent + std_mem_recent, losses_mem_recent - std_mem_recent,  alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
+#plt.plot(list(range(args.timesteps)), losses_mem_recent, label="Recency Replay")
+#plt.fill_between(list(range(args.timesteps)), losses_mem_recent + std_mem_recent, losses_mem_recent - std_mem_recent,  alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
 
 plt.title("Loss")
 plt.xlabel("Timestep")
