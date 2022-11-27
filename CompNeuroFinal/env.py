@@ -1,4 +1,5 @@
 from spikeWaveEprop import update_weights
+from weightvisual import get_neighbors
 import numpy as np
 import copy
 
@@ -19,6 +20,21 @@ environment = np.array([[5, 5, 5, 5, 1, 1, 5, 5, 5, 5],
 #big_env = np.concatenate((long_env, long_env[:, 0:5]), axis=1)
 #environment = big_env
 
+def get_loss(n1, n2, wgt, env):
+    # Calculate the average weight value of incoming weights, compare this to the environment
+    map_loss = np.zeros([n1, n2])
+    for i in range(n1):
+        for j in range(n2):
+            val = 0
+            cnt = 0
+            neighbors = get_neighbors(i, j, n1, n2)
+            for n in neighbors:
+                val += wgt[n[0]][n[1]][i][j]
+                cnt += 1
+            map_loss[i][j] = val/cnt
+
+    return np.average((map_loss - env)**2)
+
 def softmax(x, temperature=1):
     return np.exp(np.array(x)/temperature)/sum(np.exp(np.array(x)/temperature))
 
@@ -30,7 +46,7 @@ class Buffer():
     def push(self, item):
         self.stg.append(item)
         if len(self.stg) > self.maxlen:
-            del self.stg[-1]
+            del self.stg[0]
 
     def get(self, idx):
         return self.stg[idx]
@@ -63,7 +79,7 @@ class Agent():
             self.expmap[x][y] = 1.0
         else:
             #self.expmap[x][y] = max(self.expmap[x][y] - 0.01, 0.0001)
-            self.expmap[x][y] += -0.5*self.expmap[x][y]
+            self.expmap[x][y] += -0.75*self.expmap[x][y]
 
     def getexpscores(self):
         p = []
@@ -76,7 +92,6 @@ class Agent():
                 total_score += et[point[0]][point[1]] * self.expmap[point[0]][point[1]]
 
             p.append(total_score)
-            #p.append(np.mean(total_score))
 
         return p
 
@@ -85,10 +100,10 @@ class Agent():
         if type == "exp":
             #Probability based on how eligibility times how often it was visited
             p = self.getexpscores()
-            p_sm = softmax(p, 0.5)
+            p_sm = softmax(p, 0.1)
 
             for i in range(n):
-                idx = np.argmax(p)#np.random.choice(list(range(self.pathmem.length())), p=p_sm)
+                idx = np.random.choice(list(range(self.pathmem.length())), p=p_sm) #np.argmax(p)
                 path = self.pathmem.get(idx)
                 et = self.etmem.get(idx)[0]
                 wgt = update_weights(cost_map, et, path, wgt)
@@ -96,11 +111,9 @@ class Agent():
                 #Decay replay accessed, reassess softmax
                 for point in path:
                     self.update_exp(point[0], point[1])
-                #self.expmap += (np.multiply(-1*(et/2), self.expmap))
-                #self.expmap = np.where(self.expmap < 0, 0.0001, self.expmap)
 
                 p = self.getexpscores()
-                p_sm = softmax(p, 0.5)
+                p_sm = softmax(p, 0.1)
 
             #self.reset_exp()
 
@@ -109,19 +122,20 @@ class Agent():
             #p = [self.pathmem.length() - i for i in range(self.pathmem.length())]
 
             #p = [5 - np.exp(0.025*i) for i in range(self.pathmem.length())]
-            p = [self.pathmem.length() - i for i in range(self.pathmem.length())]
+            p = [i for i in range(self.pathmem.length())]
 
             #Scale probabiliies by amount of times accessed (no scaling right now)
             for j in range(len(p)):
                 p[j] = p[j] * self.etmem.get(j)[1]
 
-            p_sm = softmax(p, 25.0)
+            p_sm = softmax(p, 10.0)
 
             for i in range(n):
                 idx = np.random.choice(list(range(self.pathmem.length())), p=p_sm)
                 path = self.pathmem.get(idx)
                 et = self.etmem.get(idx)[0]
                 wgt = update_weights(cost_map, et, path, wgt)
+    
         else:
             #Uniform distribution
             p = [1/self.pathmem.length() for i in range(self.pathmem.length())]

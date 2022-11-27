@@ -1,30 +1,15 @@
 from spikeWaveEprop import *
-from weightvisual import draw_weights, get_neighbors
-from env import Agent, map_size_x, map_size_y, environment
+from weightvisual import draw_weights
+from env import Agent, map_size_x, map_size_y, environment, get_loss
 import matplotlib.pyplot as plt
 import argparse
 import numpy as np
-
-def get_loss(n1, n2, wgt, env):
-    # Calculate the average weight value of incoming weights, compare this to the environment
-    map_loss = np.zeros([n1, n2])
-    for i in range(n1):
-        for j in range(n2):
-            val = 0
-            cnt = 0
-            neighbors = get_neighbors(i, j, n1, n2)
-            for n in neighbors:
-                val += wgt[n[0]][n[1]][i][j]
-                cnt += 1
-            map_loss[i][j] = val/cnt
-
-    return np.average((map_loss - env)**2)
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--init_weights',         type=int, default=1,     help="flag to initialize weights")
 parser.add_argument('--train',         type=int, default=1,     help="flag to train model")
 parser.add_argument('--timesteps',         type=int, default=250,     help="number of training steps")
-parser.add_argument('--trials',         type=int, default=10,     help="number of repeated tests")
+parser.add_argument('--trials',         type=int, default=25,     help="number of repeated tests")
 args = parser.parse_args()
 
 def spikewave_trial(replay, replay_amt, mem_size, mem_type):
@@ -88,13 +73,14 @@ def spikewave_trial(replay, replay_amt, mem_size, mem_type):
             wp_start = np.copy(wp_end)
 
             if (t + 1) % 10 == 0:
+                #draw_weights(n1, n2, 1, 1, 0, 15, f"{mem_type}\{t+1}_{mem_type}", wgt)
                 agent.moveTo(np.array([1, 1]))
                 wp_start = np.array([1, 1])
                 if replay and t > replay_amt:
                     wgt = agent.replay(replay_amt, cost_map, wgt, mem_type)
+                    #draw_weights(n1, n2, 1, 1, 0, 15, f"{mem_type}\{t+1}_{mem_type}_afterreplay", wgt)
 
                 print(f"{t+1}/{args.timesteps} completed {mem_type}")
-                #draw_weights(n1, n2, 1, 1, 0, 15, f"{t+1}_{mem_type}", wgt)
 
             losses.append(get_loss(n1, n2, wgt, environment))
     
@@ -103,32 +89,32 @@ def spikewave_trial(replay, replay_amt, mem_size, mem_type):
 losses_nomem = []
 losses_mem = []
 losses_exp = []
-#losses_mem_recent = []
+losses_mem_recent = []
 
 for i in range(args.trials):
-    #losses_nomem.append(spikewave_trial(False, 0, 0, "nomemory"))
+    losses_nomem.append(spikewave_trial(False, 0, 0, "nomemory"))
     losses_mem.append(spikewave_trial(True, 10, 100, "uniform"))
     losses_exp.append(spikewave_trial(True, 10, 100, "exp"))
-#    losses_mem_recent.append(spikewave_trial(True, 5, 50, "recent"))
+    losses_mem_recent.append(spikewave_trial(True, 10, 100, "recent"))
 
-#losses_nomem = np.array(losses_nomem)
+losses_nomem = np.array(losses_nomem)
 losses_mem = np.array(losses_mem)
 losses_exp = np.array(losses_exp)
-#losses_mem_recent = np.array(losses_mem_recent)
+losses_mem_recent = np.array(losses_mem_recent)
 
-#std_nomem = np.std(losses_nomem, axis=0)
+std_nomem = np.std(losses_nomem, axis=0)
 std_mem = np.std(losses_mem, axis=0)
 std_exp = np.std(losses_exp, axis=0)
-#std_mem_recent = np.std(losses_nomem, axis=0)
+std_mem_recent = np.std(losses_nomem, axis=0)
 
-#losses_nomem = np.mean(losses_nomem, axis=0)
+losses_nomem = np.mean(losses_nomem, axis=0)
 losses_mem = np.mean(losses_mem, axis=0)
 losses_exp = np.mean(losses_exp, axis=0)
-#losses_mem_recent = np.mean(losses_mem_recent, axis=0)
+losses_mem_recent = np.mean(losses_mem_recent, axis=0)
 
 plt.figure()
-#plt.plot(list(range(args.timesteps)), losses_nomem, label="No Replay")
-#plt.fill_between(list(range(args.timesteps)), losses_nomem + std_nomem, losses_nomem - std_nomem, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
+plt.plot(list(range(args.timesteps)), losses_nomem, label="No Replay")
+plt.fill_between(list(range(args.timesteps)), losses_nomem + std_nomem, losses_nomem - std_nomem, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
 
 plt.plot(list(range(args.timesteps)), losses_mem, label="Uniform Replay")
 plt.fill_between(list(range(args.timesteps)), losses_mem + std_mem, losses_mem - std_mem, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
@@ -136,8 +122,8 @@ plt.fill_between(list(range(args.timesteps)), losses_mem + std_mem, losses_mem -
 plt.plot(list(range(args.timesteps)), losses_exp, label="Experience Replay")
 plt.fill_between(list(range(args.timesteps)), losses_exp + std_exp, losses_exp - std_exp, alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
 
-#plt.plot(list(range(args.timesteps)), losses_mem_recent, label="Recency Replay")
-#plt.fill_between(list(range(args.timesteps)), losses_mem_recent + std_mem_recent, losses_mem_recent - std_mem_recent,  alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
+plt.plot(list(range(args.timesteps)), losses_mem_recent, label="Recency Replay")
+plt.fill_between(list(range(args.timesteps)), losses_mem_recent + std_mem_recent, losses_mem_recent - std_mem_recent,  alpha=0.2, linewidth=4, linestyle='dashdot', antialiased=True)
 
 plt.title("Loss")
 plt.xlabel("Timestep")
